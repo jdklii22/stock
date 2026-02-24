@@ -14,7 +14,7 @@ symbol = st.sidebar.text_input("Enter Ticker", value="QQQ").upper()
 timeframe = st.sidebar.selectbox("Select Timeframe", ["Annual", "Quarterly", "Monthly"])
 
 # --- Calculation Logic ---
-@st.cache_data(ttl=3600) # Cache data for 1 hour to keep it fresh
+@st.cache_data(ttl=3600)
 def get_pivot_data(symbol, timeframe):
     resample_map = {'Annual': 'YE', 'Quarterly': 'QE', 'Monthly': 'ME'}
     
@@ -37,7 +37,7 @@ def get_pivot_data(symbol, timeframe):
     prev_period = resampled.iloc[-2]
     H, L, C = prev_period['High'], prev_period['Low'], prev_period['Close']
     
-    # Formulas
+    # Standard Pivot Formulas
     P = (H + L + C) / 3
     R1 = (P * 2) - L
     S1 = (P * 2) - H
@@ -61,16 +61,18 @@ if symbol:
     if levels:
         st.metric(label=f"Current {symbol} Price", value=f"${current_price:.2f}")
         
-        # Build Dataframe for display
         data_list = []
         for name, val in levels:
             pct_dist = ((val / current_price) - 1) * 100
             status = "Resistance (Above)" if val > current_price else "Support (Below)"
             
+            # Formatting the distance: Round to nearest whole number and add %
+            formatted_dist = f"{round(pct_dist)}%"
+            
             data_list.append({
                 "Level": name,
                 "Price": round(val, 2),
-                "% Distance": round(pct_dist, 2),
+                "% Distance": formatted_dist,
                 "Status": status
             })
             
@@ -82,9 +84,10 @@ if symbol:
             return f'color: {color}'
 
         st.subheader(f"{timeframe} Pivot Table")
+        # Displaying with a clean table
         st.table(pivot_df.style.applymap(color_status, subset=['Status']))
         
-        st.info("💡 **Tip:** Positive distance means the level is a Resistance (Target), Negative distance means it is a Support (Floor).")
+        st.info("💡 **Positive %:** Price must rise to hit this level. **Negative %:** Price must fall to hit this level.")
         
     else:
         st.error("Could not retrieve enough data. Try a more common ticker (e.g., SPY).")
