@@ -17,7 +17,7 @@ def calculate_pivots_with_distance():
 
     current_price = df['Close'].iloc[-1]
 
-    # 3. Resample for the chosen period (Updated for Pandas 3.0+)
+    # 3. Resample for the chosen period
     resample_map = {
         'annual': 'YE',      # Year End
         'quarterly': 'QE',   # Quarter End
@@ -28,20 +28,17 @@ def calculate_pivots_with_distance():
         print("Invalid timeframe.")
         return
 
-    # Grouping the data into the specified time buckets
     resampled = df.resample(resample_map[timeframe]).agg({
         'High': 'max',
         'Low': 'min',
         'Close': 'last'
     })
 
-    # We take the second-to-last row (the last fully completed period)
     if len(resampled) < 2:
-        print("Error: Not enough historical data to calculate previous period pivots.")
+        print("Error: Not enough historical data.")
         return
         
     prev_period = resampled.iloc[-2]
-    
     H, L, C = prev_period['High'], prev_period['Low'], prev_period['Close']
 
     # 4. Standard Pivot Formulas
@@ -68,14 +65,22 @@ def calculate_pivots_with_distance():
     print(header)
     print("=" * len(header))
     print(f"{'Level':<20} | {'Price':<10} | {'% Distance':<12} | {'Status'}")
-    print("-" * 60)
+    print("-" * 65)
 
     for name, val in levels:
+        # Calculate raw percentage distance
         pct_dist = ((val / current_price) - 1) * 100
+        
+        # Round to nearest whole number and convert to string with %
+        # Use :+d to include the + or - sign for the integer
+        rounded_pct = f"{round(pct_dist):+d}%"
+        
         status = "ABOVE (Resistance)" if val > current_price else "BELOW (Support)"
-        print(f"{name:<20} | ${val:>8.2f} | {pct_dist:>+10.2f}% | {status}")
+        
+        # Printing with the updated rounded_pct string
+        print(f"{name:<20} | ${val:>8.2f} | {rounded_pct:>10} | {status}")
 
-    print("-" * 60)
+    print("-" * 65)
 
 if __name__ == "__main__":
     calculate_pivots_with_distance()
