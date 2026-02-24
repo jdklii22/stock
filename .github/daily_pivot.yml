@@ -1,0 +1,46 @@
+daily_pivot.yml.
+name: Deploy Pivot Chart to Pages
+
+on:
+  schedule:
+    # This runs the script automatically at 1:00 PM UTC every day
+    - cron: '0 13 * * *' 
+  workflow_dispatch:      # This adds a "Run" button to your GitHub dashboard
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Libraries
+        run: pip install -r requirements.txt
+
+      - name: Generate Chart
+        run: python chart.py
+        env:
+          TICKER: QQQ
+          YEAR: 2026
+
+      - name: Rename for Web
+        # GitHub Pages looks for "index.html" to display as the homepage
+        run: mv pivot_candlestick.html index.html
+
+      - name: Upload to GitHub Pages
+        uses: actions/upload-pages-artifact@v2
+        with:
+          path: '.'
+
+      - name: Deploy to Live URL
+        uses: actions/deploy-pages@v2
