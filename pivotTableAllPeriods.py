@@ -87,14 +87,18 @@ def calculate_pivots(symbol, timeframe_str):
                 "Price": round(val, 2),
                 "Distance (%)": f"{round(pct_dist):+d}%",
                 "Status": status,
-                "Raw Distance": pct_dist # For sorting/coloring
+                "Raw Distance": pct_dist
             })
 
+        # FIX: Return H, L, C in the result dictionary so they are accessible later
         return {
             "symbol": symbol,
             "timeframe": timeframe_str,
             "current_price": current_price,
-            "data": results
+            "data": results,
+            "prev_high": H,
+            "prev_low": L,
+            "prev_close": C
         }, None
 
     except Exception as e:
@@ -121,13 +125,12 @@ if st.sidebar.button("Calculate Pivots", type="primary"):
         
         # Color map for Status column
         def color_status(val):
-            color = '#ffcccc' if val == 'Resistance' else '#ccffcc' # Light Red / Light Green
+            color = '#ffcccc' if val == 'Resistance' else '#ccffcc'
             return f'background-color: {color}'
 
         # Display Table
         st.subheader("Pivot Levels")
         
-        # Format the display dataframe (hide raw distance column)
         display_df = df_results[['Level', 'Price', 'Distance (%)', 'Status']].copy()
         
         st.dataframe(
@@ -139,10 +142,11 @@ if st.sidebar.button("Calculate Pivots", type="primary"):
         # Show Previous Period Data used for calculation (Accordion)
         with st.expander("View Calculation Data (Previous Period)"):
             st.write(f"Based on the previous completed {result['timeframe']} period:")
+            # FIX: Access H, L, C from the result dictionary
             st.json({
-                "High": round(H, 2),
-                "Low": round(L, 2),
-                "Close": round(C, 2)
+                "High": round(result['prev_high'], 2),
+                "Low": round(result['prev_low'], 2),
+                "Close": round(result['prev_close'], 2)
             })
 else:
     st.info("👈 Enter a ticker and click **Calculate Pivots** to begin.")
