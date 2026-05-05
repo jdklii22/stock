@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Data Downloader (Standalone)</title>
+    <!-- Lightweight Charts Library -->
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        :root {
+            font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+            line-height: 1.5;
+            font-weight: 400;
+            color-scheme: light dark;
+            color: rgba(255, 255, 255, 0.87);
+            background-color: #242424;
+        }
+
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            padding-top: 2rem;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+            width: 90%;
+            max-width: 1200px;
+            text-align: center;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+            background: #333;
+            padding: 1.5rem;
+            border-radius: 8px;
+            justify-content: center;
+            align-items: flex-end;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.5rem;
+        }
+
+        .form-group label {
+            font-size: 0.9rem;
+            font-weight: bold;
+        }
+
+        input, select {
+            padding: 0.5rem;
+            border-radius: 4px;
+            border: 1px solid #555;
+            background: #222;
+            color: white;
+        }
+
+        .checkbox-group {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .checkbox-label {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-size: 0.75rem;
+            cursor: pointer;
+        }
+
+        button {
+            padding: 0.6rem 1.2rem;
+            border-radius: 4px;
+            border: none;
+            background-color: #646cff;
+            color: white;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background-color: #535bf2;
+        }
+
+        button.secondary {
+            background-color: #4CAF50;
+        }
+
+        button.secondary:hover {
+            background-color: #45a049;
+        }
+
+        button:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+        }
+
+        .chart-container {
+            height: 500px;
+            background: #111;
+            border-radius: 8px;
+            overflow: hidden;
+            position: relative;
+            width: 100%;
+        }
+
+        #chart {
+            width: 100%;
+            height: 100%;
+        }
+
+        .placeholder {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            color: #666;
+        }
+
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Stock Data Downloader</h1>
+        
+        <div class="controls">
+            <div class="form-group">
+                <label for="ticker">Ticker:</label>
+                <input type="text" id="ticker" value="AAPL" placeholder="AAPL">
+            </div>
+
+            <div class="form-group">
+                <label for="startYear">Start Year:</label>
+                <select id="startYear"></select>
+            </div>
+
+            <div class="form-group">
+                <label for="endYear">End Year:</label>
+                <select id="endYear"></select>
+            </div>
+
+            <div class="form-group">
+                <label>Days:</label>
+                <div class="checkbox-group" id="daysGroup">
+                    <!-- Days will be populated by JS -->
+                </div>
+            </div>
+
+            <button id="fetchBtn">Fetch Data</button>
+            <button id="downloadBtn" class="secondary" style="display: none;">Download CSV</button>
+        </div>
+
+        <div class="chart-container">
+            <div id="loading" class="loading-overlay">Loading...</div>
+            <div id="chart">
+                <div class="placeholder">Enter a ticker and click Fetch Data to visualize.</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+        const currentYear = new Date().getFullYear();
+        let chart = null;
+        let candlestickSeries = null;
+        let currentData = [];
+
+        // UI Elements
+        const tickerInput = document.getElementById('ticker');
+        const startYearSelect = document.getElementById('startYear');
+        const endYearSelect = document.getElementById('endYear');
+        const daysGroup = document.getElementById('daysGroup');
+        const fetchBtn = document.getElementById('fetchBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const chartDiv = document.getElementById('chart');
+        const loadingOverlay = document.getElementById('loading');
+
+        // Initialize Selects
+        for (let i = 0; i < 30; i++) {
+            const year = currentYear - i;
+            const optStart = new Option(year, year);
+            const optEnd = new Option(year, year);
+            startYearSelect.add(optStart);
+            endYearSelect.add(optEnd);
+        }
+        startYearSelect.value = currentYear - 5;
+        endYearSelect.value = currentYear;
+
+        // Initialize Checkboxes
+        DAYS_OF_WEEK.forEach(day => {
+            const label = document.createElement('label');
+            label.className = 'checkbox-label';
+            const isWeekday = day !== 'Saturday' && day !== 'Sunday';
+            label.innerHTML = `
+                <input type="checkbox" value="${day}" ${isWeekday ? 'checked' : ''}>
+                ${day.slice(0, 3)}
+            `;
+            daysGroup.appendChild(label);
+        });
+
+        async function fetchData() {
+            const ticker = tickerInput.value.toUpperCase();
+            const startYear = startYearSelect.value;
+            const endYear = endYearSelect.value;
+            const selectedDays = Array.from(daysGroup.querySelectorAll('input:checked')).map(i => i.value);
+
+            if (!ticker) return alert("Please enter a ticker");
+
+            setLoading(true);
+
+            try {
+                const startTime = Math.floor(new Date(`${startYear}-01-01`).getTime() / 1000);
+                const endTime = Math.floor(new Date(`${endYear}-12-31`).getTime() / 1000);
+                
+                // Yahoo Finance API URL
+                const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?period1=${startTime}&period2=${endTime}&interval=1d`;
+                
+                // Use AllOrigins CORS Proxy
+                const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(yahooUrl)}`;
+
+                const response = await fetch(proxyUrl);
+                const result = await response.json();
+                
+                if (!result.contents) throw new Error("Failed to fetch data from proxy");
+                
+                const data = JSON.parse(result.contents);
+                
+                if (data.chart.error) throw new Error(data.chart.error.description);
+                
+                const resultData = data.chart.result[0];
+                const timestamps = resultData.timestamp;
+                const quotes = resultData.indicators.quote[0];
+
+                const formatted = timestamps.map((ts, i) => {
+                    const date = new Date(ts * 1000);
+                    const dayName = date.toLocaleDateString('en-US', { weekday: 'long' });
+                    
+                    if (!selectedDays.includes(dayName)) return null;
+
+                    return {
+                        time: date.toISOString().split('T')[0],
+                        open: quotes.open[i],
+                        high: quotes.high[i],
+                        low: quotes.low[i],
+                        close: quotes.close[i]
+                    };
+                }).filter(item => item && item.open !== null);
+
+                if (formatted.length === 0) {
+                    alert("No data found for the selected filters.");
+                } else {
+                    currentData = formatted;
+                    renderChart(formatted);
+                    downloadBtn.style.display = 'inline-block';
+                }
+            } catch (error) {
+                console.error(error);
+                alert("Error: " + error.message);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        function renderChart(data) {
+            chartDiv.innerHTML = ''; // Clear placeholder
+            
+            chart = LightweightCharts.createChart(chartDiv, {
+                layout: {
+                    background: { type: 'solid', color: '#111' },
+                    textColor: '#DDD',
+                },
+                grid: {
+                    vertLines: { color: '#333' },
+                    horzLines: { color: '#333' },
+                },
+                width: chartDiv.clientWidth,
+                height: 500,
+            });
+
+            candlestickSeries = chart.addSeries(LightweightCharts.CandlestickSeries, {
+                upColor: '#26a69a',
+                downColor: '#ef5350',
+                borderVisible: false,
+                wickUpColor: '#26a69a',
+                wickDownColor: '#ef5350',
+            });
+
+            candlestickSeries.setData(data);
+            chart.timeScale().fitContent();
+
+            window.addEventListener('resize', () => {
+                chart.applyOptions({ width: chartDiv.clientWidth });
+            });
+        }
+
+        function downloadCSV() {
+            if (currentData.length === 0) return;
+
+            const ticker = tickerInput.value.toUpperCase();
+            const headers = ["Date", "Open", "High", "Low", "Close"];
+            const csvContent = [
+                headers.join(","),
+                ...currentData.map(row => `${row.time},${row.open},${row.high},${row.low},${row.close}`)
+            ].join("\n");
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `${ticker}_data.csv`);
+            link.click();
+        }
+
+        function setLoading(isLoading) {
+            loadingOverlay.style.display = isLoading ? 'flex' : 'none';
+            fetchBtn.disabled = isLoading;
+        }
+
+        fetchBtn.addEventListener('click', fetchData);
+        downloadBtn.addEventListener('click', downloadCSV);
+
+    </script>
+</body>
+</html>
